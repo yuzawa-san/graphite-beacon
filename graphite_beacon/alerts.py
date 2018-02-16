@@ -238,11 +238,11 @@ class BaseAlert(_.with_metaclass(AlertFabric)):
             raise gen.Return(False)
 
         self.state[target] = level
-        # attempt to resolve lookups
-        lookup_url = self.options.get("lookup_url")
         if target:
             # wrap the target to handle override and stash original value
             target = Target(target)
+            # attempt to resolve lookups
+            lookup_url = self.options.get("lookup_url")
             if lookup_url:
                 try:
                     response = yield self.client.fetch(lookup_url)

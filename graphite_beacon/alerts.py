@@ -229,19 +229,14 @@ class BaseAlert(_.with_metaclass(AlertFabric)):
         # attempt to resolve lookups
         lookup_url = self.options.get("lookup_url")
         if target and lookup_url:
-            target = yield self._resolve_lookup(lookup_url, target)
+            try:
+                response = yield self.client.fetch(lookup_url)
+                lookup = json.loads(response.body)
+                if target in lookup:
+                    target = "%s [%s]" % (lookup[target], target)
+            except Exception as e:
+                LOGGER.error("Failed to fetch lookups: %s",e)
         raise gen.Return(self.reactor.notify(level, self, value, target=target, ntype=ntype, rule=rule))
-
-    @gen.coroutine
-    def _resolve_lookup(self, lookup_url, target):
-        try:
-            response = yield self.client.fetch(lookup_url)
-            lookup = json.loads(response.body)
-            if target in lookup:
-                target = "%s [%s]" % (lookup[target], target)
-        except Exception as e:
-            LOGGER.error("Failed to fetch lookups: %s",e)
-        raise gen.Return(target)
 
     def load(self):
         """Load from remote."""

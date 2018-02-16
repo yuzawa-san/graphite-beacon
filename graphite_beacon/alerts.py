@@ -55,6 +55,18 @@ class AlertFabric(type):
         acls = cls.alerts[source]
         return acls(reactor, **options)
 
+class Target():
+
+    """ Wrapper for target which allows lookup values """
+
+    def __init__(self, original_value):
+        self.original_value = original_value
+        self.lookup_value = None
+
+    def __repr__(self):
+        if self.lookup_value:
+            return "%s [%s]" % (self.lookup_value, self.original_value)
+        return self.original_value
 
 class BaseAlert(_.with_metaclass(AlertFabric)):
 
@@ -228,14 +240,17 @@ class BaseAlert(_.with_metaclass(AlertFabric)):
         self.state[target] = level
         # attempt to resolve lookups
         lookup_url = self.options.get("lookup_url")
-        if target and lookup_url:
-            try:
-                response = yield self.client.fetch(lookup_url)
-                lookup = json.loads(response.body)
-                if target in lookup:
-                    target = "%s [%s]" % (lookup[target], target)
-            except Exception as e:
-                LOGGER.error("Failed to fetch lookups: %s",e)
+        if target:
+            # wrap the target to handle override and stash original value
+            target = Target(target)
+            if lookup_url:
+                try:
+                    response = yield self.client.fetch(lookup_url)
+                    lookup = json.loads(response.body)
+                    if target.original_value in lookup:
+                        target.lookup_value = lookup[target.original_value]
+                except Exception as e:
+                    LOGGER.error("Failed to fetch lookups: %s",e)
         raise gen.Return(self.reactor.notify(level, self, value, target=target, ntype=ntype, rule=rule))
 
     def load(self):
@@ -298,7 +313,7 @@ class GraphiteAlert(BaseAlert):
 
     def get_graph_url(self, target, graphite_url=None):
         """Get Graphite URL."""
-        effective_target = self.query if "*" in self.query else target
+        effective_target = "grep(%s,'%s')" % (self.query, target.original_value)
         return self._graphite_url(effective_target, graphite_url=graphite_url, raw_data=False)
 
     def _graphite_url(self, query, raw_data=False, graphite_url=None):

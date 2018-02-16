@@ -303,7 +303,8 @@ class GraphiteAlert(BaseAlert):
 
     def get_graph_url(self, target, graphite_url=None):
         """Get Graphite URL."""
-        return self._graphite_url(target, graphite_url=graphite_url, raw_data=False)
+        effective_target = self.query if "*" in self.query else target
+        return self._graphite_url(effective_target, graphite_url=graphite_url, raw_data=False)
 
     def _graphite_url(self, query, raw_data=False, graphite_url=None):
         """Build Graphite URL."""

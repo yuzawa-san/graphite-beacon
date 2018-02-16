@@ -1,5 +1,6 @@
 """Implement alerts."""
 
+import json
 import math
 from collections import defaultdict, deque
 from itertools import islice
@@ -212,19 +213,35 @@ class BaseAlert(_.with_metaclass(AlertFabric)):
         rvalue = expr['mod'](rvalue)
         return rvalue
 
+    @gen.coroutine
     def notify(self, level, value, target=None, ntype=None, rule=None):
         """Notify main reactor about event."""
         # Did we see the event before?
         if target in self.state and level == self.state[target]:
-            return False
+            raise gen.Return(False)
 
         # Do we see the event first time?
         if target not in self.state and level == 'normal' \
                 and not self.reactor.options['send_initial']:
-            return False
+            raise gen.Return(False)
 
         self.state[target] = level
-        return self.reactor.notify(level, self, value, target=target, ntype=ntype, rule=rule)
+        # attempt to resolve lookups
+        lookup_url = self.options.get("lookup_url")
+        if target and lookup_url:
+            target = yield self._resolve_lookup(lookup_url, target)
+        raise gen.Return(self.reactor.notify(level, self, value, target=target, ntype=ntype, rule=rule))
+
+    @gen.coroutine
+    def _resolve_lookup(self, lookup_url, target):
+        try:
+            response = yield self.client.fetch(lookup_url)
+            lookup = json.loads(response.body)
+            if target in lookup:
+                target = "%s [%s]" % (lookup[target], target)
+        except Exception as e:
+            LOGGER.error("Failed to fetch lookups: %s",e)
+        raise gen.Return(target)
 
     def load(self):
         """Load from remote."""
